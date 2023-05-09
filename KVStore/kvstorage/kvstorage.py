@@ -60,7 +60,7 @@ class KVStorageSimpleService(KVStorageService):
 
     def l_pop(self, key: int) -> Union[str, None]:
         try:
-            if len(self._dictionary[key]) > 1:
+            if len(self._dictionary[key]) >= 1:
                 char = self._dictionary[key][0]
                 self._dictionary[key] = self._dictionary[key][1:]
                 return char
@@ -72,7 +72,7 @@ class KVStorageSimpleService(KVStorageService):
 
     def r_pop(self, key: int) -> Union[str, None]:
         try:
-            if len(self._dictionary[key]) > 1:
+            if len(self._dictionary[key]) >= 1:
                 char = self._dictionary[key][-1]
                 self._dictionary[key] = self._dictionary[key][:-1]
                 return char
@@ -87,7 +87,7 @@ class KVStorageSimpleService(KVStorageService):
 
     def append(self, key: int, value: str):
         if key in self._dictionary.keys():
-            self._dictionary[key] = value + self._dictionary[key] # casting?
+            self._dictionary[key] = self._dictionary[key] + value # casting?
         else:
             self._dictionary[key] = value
 
@@ -156,19 +156,28 @@ class KVStorageServicer(KVStoreServicer):
         """
 
     def Get(self, request: GetRequest, context) -> GetResponse:
-        """
-        To fill with your code
-        """
+        key = request.key
+        response = self.storage_service.get(key)
+        get_response = GetResponse()
+        if response is not None:
+            get_response.value = response
+        return get_response
 
     def LPop(self, request: GetRequest, context) -> GetResponse:
-        """
-        To fill with your code
-        """
+        key = request.key
+        response = self.storage_service.l_pop(key)
+        get_response = GetResponse()
+        if response is not None:
+            get_response.value = response
+        return get_response
 
     def RPop(self, request: GetRequest, context) -> GetResponse:
-        """
-        To fill with your code
-        """
+        key = request.key
+        response = self.storage_service.r_pop(key)
+        get_response = GetResponse()
+        if response is not None:
+            get_response.value = response
+        return get_response
 
     def Put(self, request: PutRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
         key = request.key
@@ -177,9 +186,10 @@ class KVStorageServicer(KVStoreServicer):
         return google_dot_protobuf_dot_empty__pb2.Empty()
 
     def Append(self, request: AppendRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
-        """
-        To fill with your code
-        """
+        key = request.key
+        value = request.value
+        self.storage_service.append(key, value)
+        return google_dot_protobuf_dot_empty__pb2.Empty()
 
     def Redistribute(self, request: RedistributeRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
         """
