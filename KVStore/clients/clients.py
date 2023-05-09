@@ -37,9 +37,8 @@ class SimpleClient:
         """
 
     def put(self, key: int, value: str):
-        """
-        To fill with your code
-        """
+        put_request = PutRequest(key=key, value=value)
+        self.stub.Put(put_request)
 
     def append(self, key: int, value: str):
         """

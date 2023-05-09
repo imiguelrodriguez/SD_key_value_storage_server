@@ -49,34 +49,47 @@ class KVStorageService:
 class KVStorageSimpleService(KVStorageService):
 
     def __init__(self):
-        """
-        To fill with your code
-        """
+        super().__init__()
+        self._dictionary = dict()
 
     def get(self, key: int) -> Union[str, None]:
-        """
-        To fill with your code
-        """
+        try:
+            return self._dictionary[key]
+        except KeyError:
+            return None
 
     def l_pop(self, key: int) -> Union[str, None]:
-        """
-        To fill with your code
-        """
+        try:
+            if len(self._dictionary[key]) > 1:
+                char = self._dictionary[key][0]
+                self._dictionary[key] = self._dictionary[key][1:]
+                return char
+            else:
+                self._dictionary[key] = ""
+                return ""
+        except KeyError:
+            return None
 
     def r_pop(self, key: int) -> Union[str, None]:
-        """
-        To fill with your code
-        """
+        try:
+            if len(self._dictionary[key]) > 1:
+                char = self._dictionary[key][-1]
+                self._dictionary[key] = self._dictionary[key][:-1]
+                return char
+            else:
+                self._dictionary[key] = ""
+                return ""
+        except KeyError:
+            return None
 
     def put(self, key: int, value: str):
-        """
-        To fill with your code
-        """
+        self._dictionary[key] = value
 
     def append(self, key: int, value: str):
-        """
-        To fill with your code
-        """
+        if key in self._dictionary.keys():
+            self._dictionary[key] = value + self._dictionary[key] # casting?
+        else:
+            self._dictionary[key] = value
 
     def redistribute(self, destination_server: str, lower_val: int, upper_val: int):
         """
@@ -158,9 +171,10 @@ class KVStorageServicer(KVStoreServicer):
         """
 
     def Put(self, request: PutRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
-        """
-        To fill with your code
-        """
+        key = request.key
+        value = request.value
+        self.storage_service.put(key, value)
+        return google_dot_protobuf_dot_empty__pb2.Empty()
 
     def Append(self, request: AppendRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
         """
