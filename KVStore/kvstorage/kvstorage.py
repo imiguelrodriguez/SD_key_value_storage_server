@@ -51,6 +51,7 @@ class KVStorageSimpleService(KVStorageService):
     def __init__(self):
         super().__init__()
         self._dictionary = dict()
+        self._brothers = dict()  # TODO: get rid of stub if deleted
 
     def get(self, key: int) -> Union[str, None]:
         try:
@@ -87,19 +88,23 @@ class KVStorageSimpleService(KVStorageService):
 
     def append(self, key: int, value: str):
         if key in self._dictionary.keys():
-            self._dictionary[key] = self._dictionary[key] + value # casting?
+            self._dictionary[key] = self._dictionary[key] + value  # casting?
         else:
             self._dictionary[key] = value
 
     def redistribute(self, destination_server: str, lower_val: int, upper_val: int):
-        """
-        To fill with your code
-        """
+        keys_transfer = []
+        keys = list(self._dictionary.keys())
+        for i in range(lower_val, upper_val + 1):
+            keys_transfer.append(KeyValue(key=keys[i], value=self._dictionary.pop(keys[i])))
+        if destination_server not in self._brothers.keys():
+            channel = grpc.insecure_channel(destination_server)
+            self._brothers[destination_server] = KVStoreStub(channel)
+        self._brothers[destination_server].Transfer(TransferRequest(keys_values=keys_transfer))
 
     def transfer(self, keys_values: List[KeyValue]):
-        """
-        To fill with your code
-        """
+        for key, value in keys_values:
+            self._dictionary[key] = value
 
 
 class KVStorageReplicasService(KVStorageSimpleService):

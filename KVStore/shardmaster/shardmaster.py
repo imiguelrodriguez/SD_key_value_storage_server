@@ -1,4 +1,7 @@
 import logging
+
+import grpc
+
 from KVStore.tests.utils import KEYS_LOWER_THRESHOLD, KEYS_UPPER_THRESHOLD
 from KVStore.protos.kv_store_pb2 import RedistributeRequest, ServerRequest
 from KVStore.protos.kv_store_pb2_grpc import KVStoreStub
@@ -25,16 +28,46 @@ class ShardMasterService:
         pass
 
 
+class KeyRange:
+    def __init__(self, minimum, maximum, stub=None):
+        self._min = minimum
+        self._max = maximum
+        self._stub = stub
+
+    @property
+    def min(self):
+        return self._min
+
+    @property
+    def max(self):
+        return self._max
+
+    @property
+    def stub(self):
+        return self._stub
+
+
 class ShardMasterSimpleService(ShardMasterService):
     def __init__(self):
-        """
-        To fill with your code
-        """
+        self._servers = dict()
 
     def join(self, server: str):
-        """
-        To fill with your code
-        """
+        num = len(self._servers)
+        channel = grpc.insecure_channel(server)
+        stub = KVStoreStub(channel)
+
+        if num == 0:
+            self._servers[server] = KeyRange(KEYS_LOWER_THRESHOLD, KEYS_UPPER_THRESHOLD, stub)
+        else:
+            keys_per_server = KEYS_UPPER_THRESHOLD // num + 1
+            self._servers[server] = KeyRange(keys_per_server * num, KEYS_UPPER_THRESHOLD, stub)
+            keys = list(self._servers.keys())
+            for i, key in enumerate(keys[:-1]):
+                # can be threaded
+                self._servers[key].min = keys_per_server * i
+                new_max = keys_per_server * (i + 1)
+                self._servers[key].stub.Redistribute(destination_server=keys[i+1], lower_val=new_max, upper_val=self._servers[key].max)
+                self._servers[key].max = new_max
 
     def leave(self, server: str):
         """
