@@ -1,4 +1,4 @@
-from typing import Union, Dict
+from typing import Union, Dict, Type
 import grpc
 import logging
 from KVStore.protos.kv_store_pb2 import GetRequest, PutRequest, GetResponse, AppendRequest
@@ -52,36 +52,31 @@ class ShardClient(SimpleClient):
         self.stub = ShardMasterStub(self.channel)
         self._servers = dict()  # dictionary that will store port:stub, so that overhead is reduced
 
-    def _query_server(self, key: int, value: Union[str, None], type: str):
+    def _query_server(self, key: int, value: Union[str, None], type: Union[Type[GetRequest], Type[PutRequest], Type[AppendRequest]]):
         req = QueryRequest(key=key)
         response = self.stub.Query(req)
         if key not in self._servers.keys():
             channel = grpc.insecure_channel(response)
             self._servers[key] = KVStoreStub(channel)
-        if type.upper() == "GET":
-            get_request = GetRequest(key=key)
-            return get_request
-        elif type.upper() == "PUT":
-            put_request = PutRequest(key=key, value=value)
-            return put_request
+        if type is GetRequest:
+            return type(key=key)
         else:
-            append_request = AppendRequest(key=key, value=value)
-            return append_request
+            return type(key=key, value=value)
 
     def get(self, key: int) -> Union[str, None]:
-        return _get_return(self._servers[key].Get(self._query_server(key, None, "get")))
+        return _get_return(self._servers[key].Get(self._query_server(key, None, GetRequest)))
 
     def l_pop(self, key: int) -> Union[str, None]:
-        return _get_return(self._servers[key].LPop(self._query_server(key, None, "get")))
+        return _get_return(self._servers[key].LPop(self._query_server(key, None, GetRequest)))
 
     def r_pop(self, key: int) -> Union[str, None]:
-        return _get_return(self._servers[key].RPop(self._query_server(key, None, "get")))
+        return _get_return(self._servers[key].RPop(self._query_server(key, None, GetRequest)))
 
     def put(self, key: int, value: str):
-        self._servers[key].Put(self._query_server(key, None, "put"))
+        self._servers[key].Put(self._query_server(key, None, PutRequest))
 
     def append(self, key: int, value: str):
-        self._servers[key].Append(self._query_server(key, None, "append"))
+        self._servers[key].Append(self._query_server(key, None, AppendRequest))
 
 
 class ShardReplicaClient(ShardClient):
