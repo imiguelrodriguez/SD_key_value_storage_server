@@ -100,7 +100,8 @@ class KVStorageSimpleService(KVStorageService):
         if destination_server not in self._brothers.keys():
             channel = grpc.insecure_channel(destination_server)
             self._brothers[destination_server] = KVStoreStub(channel)
-        self._brothers[destination_server].Transfer(TransferRequest(keys_values=keys_transfer))
+        if len(keys_transfer) != 0:
+            self._brothers[destination_server].Transfer(TransferRequest(keys_values=keys_transfer))
 
     def transfer(self, keys_values: List[KeyValue]):
         for key, value in keys_values:

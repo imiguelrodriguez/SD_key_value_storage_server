@@ -49,6 +49,18 @@ class KeyRange:
     def stub(self):
         return self._stub
 
+    @min.setter
+    def min(self, m):
+        self._min = m
+
+    @max.setter
+    def max(self, m):
+        self._max = m
+
+    @stub.setter
+    def stub(self, s):
+        self._stub = s
+
 
 class ShardMasterSimpleService(ShardMasterService):
     def __init__(self):
@@ -58,7 +70,6 @@ class ShardMasterSimpleService(ShardMasterService):
         num = len(self._servers)
         channel = grpc.insecure_channel(server)
         stub = KVStoreStub(channel)
-
         if num == 0:
             self._servers[server] = KeyRange(KEYS_LOWER_THRESHOLD, KEYS_UPPER_THRESHOLD, stub)
         else:
@@ -82,16 +93,43 @@ class ShardMasterSimpleService(ShardMasterService):
         left = self._get_servers("LEFT", server)
         right = self._get_servers("RIGHT", server)
         remaining_keys = KEYS_UPPER_THRESHOLD - (keys_per_server * num)
+        '''Generar lista de servidores, saber posicion del que hay que eliminar'''
+        keys = list(self._servers.keys())
+        index = keys.index(server)
+        remove = keys.pop(index)
+        rearrange = {}
+        keys_left_rearrange = 0
+        for i, key in enumerate(keys):
+            if remaining_keys != 0:
+                rearrange[key] = keys_per_server + 1
+                remaining_keys -= 1
+            else:
+                rearrange[key] = keys_per_server
+            if i < index:
+                keys_left_rearrange += rearrange[key]
+        keys_left = self._servers[keys[index - 1]].max
 
+        # first distribution for left and right servers
+
+        self._servers[remove].stub.Redistribute(
+            RedistributeRequest(destination_server=keys[index - 1], lower_val=self._servers[remove].min,
+                                upper_val=keys_left_rearrange - keys_left + self._servers[remove].min))
+        self._servers[remove].stub.Redistribute(
+            RedistributeRequest(destination_server=keys[index], lower_val=keys_left_rearrange - keys_left
+                                                                          + self._servers[remove].min,
+                                upper_val=self._servers[remove].max))
+
+        for key in reversed(keys[:index]):
+            pass
 
     def _rearrange(self, server: str, keys_per_server: int):
         keys = list(self._servers.keys())
         for i, key in enumerate(keys[:-1]):
             # can be threaded
-            self._servers[key].min = keys_per_server * i
+            self._servers[key].min = (keys_per_server + 1) * i
             new_max = keys_per_server * (i + 1)
-            self._servers[key].stub.Redistribute(destination_server=keys[i + 1], lower_val=new_max,
-                                                 upper_val=self._servers[key].max)
+            self._servers[key].stub.Redistribute(RedistributeRequest(destination_server=keys[i + 1], lower_val=new_max,
+                                                                     upper_val=self._servers[key].max))
             self._servers[key].max = new_max
 
     def query(self, key: int) -> str:
@@ -123,6 +161,7 @@ class ShardMasterReplicasService(ShardMasterSimpleService):
         """
         To fill with your code
         """
+
 
 class ShardMasterServicer(ShardMasterServicer):
     def __init__(self, shard_master_service: ShardMasterService):

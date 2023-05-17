@@ -49,7 +49,6 @@ if __name__ ==  '__main__':
         for i in range(num_servers)
     ]
 
-
     for i in range(num_servers - 1):
         print(f"{i} storage servers.")
 
