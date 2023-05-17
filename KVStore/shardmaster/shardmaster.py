@@ -73,8 +73,8 @@ class ShardMasterSimpleService(ShardMasterService):
         if num == 0:
             self._servers[server] = KeyRange(KEYS_LOWER_THRESHOLD, KEYS_UPPER_THRESHOLD, stub)
         else:
-            keys_per_server = KEYS_UPPER_THRESHOLD // num + 1
-            self._servers[server] = KeyRange(keys_per_server * num, KEYS_UPPER_THRESHOLD, stub)
+            keys_per_server = (KEYS_UPPER_THRESHOLD + 1) // (num + 1)
+            self._servers[server] = KeyRange((keys_per_server * num) + 1, KEYS_UPPER_THRESHOLD, stub)
             self._rearrange(server, keys_per_server)
 
     def _get_servers(self, side: str, server: str) -> int:
@@ -128,7 +128,7 @@ class ShardMasterSimpleService(ShardMasterService):
             # can be threaded
             self._servers[key].min = (keys_per_server + 1) * i
             new_max = keys_per_server * (i + 1)
-            self._servers[key].stub.Redistribute(RedistributeRequest(destination_server=keys[i + 1], lower_val=new_max,
+            self._servers[key].stub.Redistribute(RedistributeRequest(destination_server=keys[i + 1], lower_val=new_max + 1,
                                                                      upper_val=self._servers[key].max))
             self._servers[key].max = new_max
 

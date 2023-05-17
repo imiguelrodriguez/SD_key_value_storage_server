@@ -94,9 +94,9 @@ class KVStorageSimpleService(KVStorageService):
 
     def redistribute(self, destination_server: str, lower_val: int, upper_val: int):
         keys_transfer = []
-        keys = list(self._dictionary.keys())
         for i in range(lower_val, upper_val + 1):
-            keys_transfer.append(KeyValue(key=keys[i], value=self._dictionary.pop(keys[i])))
+            if i in self._dictionary.keys():
+                keys_transfer.append(KeyValue(key=i, value=self._dictionary.pop(i)))
         if destination_server not in self._brothers.keys():
             channel = grpc.insecure_channel(destination_server)
             self._brothers[destination_server] = KVStoreStub(channel)
