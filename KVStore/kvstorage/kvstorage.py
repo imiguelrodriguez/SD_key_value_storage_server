@@ -197,14 +197,15 @@ class KVStorageServicer(KVStoreServicer):
         return google_dot_protobuf_dot_empty__pb2.Empty()
 
     def Redistribute(self, request: RedistributeRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
-        """
-        To fill with your code
-        """
+        destination_server = request.destination_server
+        lower_val = request.lower_val
+        upper_val = request.upper_val
+        self.storage_service.redistribute(destination_server, lower_val, upper_val)
+        return google_dot_protobuf_dot_empty__pb2.Empty()
 
     def Transfer(self, request: TransferRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
-        """
-        To fill with your code
-        """
+        keys_values = request.keys_values
+        self.storage_service.transfer(list(keys_values))
 
     def AddReplica(self, request: ServerRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
         """
