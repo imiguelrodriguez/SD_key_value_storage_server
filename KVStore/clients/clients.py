@@ -46,37 +46,42 @@ class SimpleClient:
 
 
 class ShardClient(SimpleClient):
-    def __init__(self, shard_master_address: str):
+    def __init__(self, shard_master_address: str, kvstore_address: str):
+        super().__init__(kvstore_address)
         self.channel = grpc.insecure_channel(shard_master_address)
         self.stub = ShardMasterStub(self.channel)
-        """
-        To fill with your code
-        """
+        self._servers = dict()  # dictionary that will store port:stub, so that overhead is reduced
+
+    def _query_server(self, key: int, value: Union[str, None], type: str):
+        req = QueryRequest(key=key)
+        response = self.stub.Query(req)
+        if key not in self._servers.keys():
+            channel = grpc.insecure_channel(response)
+            self._servers[key] = KVStoreStub(channel)
+        if type.upper() == "GET":
+            get_request = GetRequest(key=key)
+            return get_request
+        elif type.upper() == "PUT":
+            put_request = PutRequest(key=key, value=value)
+            return put_request
+        else:
+            append_request = AppendRequest(key=key, value=value)
+            return append_request
 
     def get(self, key: int) -> Union[str, None]:
-        """
-        To fill with your code
-        """
+        return _get_return(self._servers[key].Get(self._query_server(key, None, "get")))
 
     def l_pop(self, key: int) -> Union[str, None]:
-        """
-        To fill with your code
-        """
+        return _get_return(self._servers[key].LPop(self._query_server(key, None, "get")))
 
     def r_pop(self, key: int) -> Union[str, None]:
-        """
-        To fill with your code
-        """
+        return _get_return(self._servers[key].RPop(self._query_server(key, None, "get")))
 
     def put(self, key: int, value: str):
-        """
-        To fill with your code
-        """
+        self._servers[key].Put(self._query_server(key, None, "put"))
 
     def append(self, key: int, value: str):
-        """
-        To fill with your code
-        """
+        self._servers[key].Append(self._query_server(key, None, "append"))
 
 
 class ShardReplicaClient(ShardClient):

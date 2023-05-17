@@ -18,6 +18,9 @@ class ShardMasterService:
     def leave(self, server: str):
         pass
 
+    def _rearrange(self, server: str, keys_per_server: int):
+        pass
+
     def query(self, key: int) -> str:
         pass
 
@@ -61,23 +64,42 @@ class ShardMasterSimpleService(ShardMasterService):
         else:
             keys_per_server = KEYS_UPPER_THRESHOLD // num + 1
             self._servers[server] = KeyRange(keys_per_server * num, KEYS_UPPER_THRESHOLD, stub)
-            keys = list(self._servers.keys())
-            for i, key in enumerate(keys[:-1]):
-                # can be threaded
-                self._servers[key].min = keys_per_server * i
-                new_max = keys_per_server * (i + 1)
-                self._servers[key].stub.Redistribute(destination_server=keys[i+1], lower_val=new_max, upper_val=self._servers[key].max)
-                self._servers[key].max = new_max
+            self._rearrange(server, keys_per_server)
+
+    def _get_servers(self, side: str, server: str) -> int:
+        keys = list(self._servers.keys())
+        index = keys.index(server)
+        if side.upper() == "LEFT":
+            return index
+        else:
+            return len(keys) - index - 1
 
     def leave(self, server: str):
-        """
-        To fill with your code
-        """
+        # supposing at least one server left
+        num = len(self._servers) - 1
+        keys_per_server = KEYS_UPPER_THRESHOLD // num
+        # self._rearrange(server, keys_per_server)
+        left = self._get_servers("LEFT", server)
+        right = self._get_servers("RIGHT", server)
+        remaining_keys = KEYS_UPPER_THRESHOLD - (keys_per_server * num)
+
+
+    def _rearrange(self, server: str, keys_per_server: int):
+        keys = list(self._servers.keys())
+        for i, key in enumerate(keys[:-1]):
+            # can be threaded
+            self._servers[key].min = keys_per_server * i
+            new_max = keys_per_server * (i + 1)
+            self._servers[key].stub.Redistribute(destination_server=keys[i + 1], lower_val=new_max,
+                                                 upper_val=self._servers[key].max)
+            self._servers[key].max = new_max
 
     def query(self, key: int) -> str:
-        """
-        To fill with your code
-        """
+        num = len(self._servers)
+        keys_per_server = KEYS_UPPER_THRESHOLD // num
+        num_server = key // keys_per_server
+        keys = list(self._servers.keys())
+        return keys[num_server]
 
 
 class ShardMasterReplicasService(ShardMasterSimpleService):
