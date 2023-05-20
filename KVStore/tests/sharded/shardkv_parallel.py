@@ -31,5 +31,4 @@ class ShardKVParallelTests(Test):
         assert (test_append(client, client_id * 20, DATA[client_id]))
         assert (test_get(client, client_id * 20, DATA[client_id] + DATA[client_id]))
         assert (test_put(client, client_id * 20, ""))
-        logger.info("pasa paralel")
         client.stop()

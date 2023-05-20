@@ -37,6 +37,9 @@ class KeyRange:
         self._max = maximum
         self._stub = stub
 
+    def __str__(self):
+        return self.__dict__.__str__()
+
     @property
     def min(self):
         return self._min
@@ -78,49 +81,70 @@ class ShardMasterSimpleService(ShardMasterService):
             self._rearrange(server, keys_per_server)
 
     def _get_servers(self, side: str, server: str) -> int:
-        keys = list(self._servers.keys())
+        keys = list(self._servers)
+        logger.info(keys)
         index = keys.index(server)
         if side.upper() == "LEFT":
             return index
         else:
             return len(keys) - index - 1
 
+    def _redistribute(self, server: str, direction: str, r: KeyRange):
+        server_to_remove = server
+        servers_list = list(self._servers)
+        index = servers_list.index(server)
+        keys_per_server = KEYS_UPPER_THRESHOLD // (len(self._servers) - 1)
+        if direction.upper() == "LEFT":
+            for i in reversed(range(1, index)):
+                logger.info(f"LEFT: redistributing {r.min} to {r.max}.")
+                self._servers[server].stub.Redistribute(
+                    RedistributeRequest(destination_server=servers_list[i - 1], lower_val=r.min,
+                                        upper_val=r.max))
+                self._servers[i - 1].max = r.max
+                r.max = (keys_per_server * i) - 1
+                r.min = self._servers[i - 1].min
+                self._servers[i - 1].min = keys_per_server * i
+                server = self._servers[i - 1]
+
+        elif direction.upper() == "RIGHT":
+            logger.info(f"RIGHT: redistributing {r.min} to {r.max}.")
+            for i in range(index, len(self._servers)):
+                self._servers[server].stub.Redistribute(
+                    RedistributeRequest(destination_server=servers_list[i + 1], lower_val=r.min,
+                                        upper_val=r.max))
+                self._servers[i + 1].max = (keys_per_server * i) + 1
+                r.max = self._servers[i + 1].max
+                r.min = keys_per_server * i
+                self._servers[i + 1].min = r.min
+                logger.info(f"New range for server is {self._servers[i + 1].min} - {self._servers[i + 1].max}")
+                server = self._servers[i + 1]
+        self._servers.pop(server_to_remove)
+
     def leave(self, server: str):
         # supposing at least one server left
-        num = len(self._servers) - 1
-        keys_per_server = KEYS_UPPER_THRESHOLD // num
-        # self._rearrange(server, keys_per_server)
-        left = self._get_servers("LEFT", server)
-        right = self._get_servers("RIGHT", server)
-        remaining_keys = KEYS_UPPER_THRESHOLD - (keys_per_server * num)
-        '''Generar lista de servidores, saber posicion del que hay que eliminar'''
-        keys = list(self._servers.keys())
-        index = keys.index(server)
-        remove = keys.pop(index)
-        rearrange = {}
-        keys_left_rearrange = 0
-        for i, key in enumerate(keys):
-            if remaining_keys != 0:
-                rearrange[key] = keys_per_server + 1
-                remaining_keys -= 1
-            else:
-                rearrange[key] = keys_per_server
-            if i < index:
-                keys_left_rearrange += rearrange[key]
-        keys_left = self._servers[keys[index - 1]].max
+        logger.info(f"I'm server number {list(self._servers).index(server)} of {len(self._servers)} servers and I leave.")
+        keys_to_redistribute = self._servers[server]
+        num_left = self._get_servers("LEFT", server)
+        num_right = self._get_servers("RIGHT", server)
+        logger.info(f"Left servers: {num_left}, Right servers: {num_right}")
+        last_kps = KEYS_UPPER_THRESHOLD // len(self._servers)
+        keys_per_server = KEYS_UPPER_THRESHOLD // (len(self._servers) - 1)
+        division = keys_to_redistribute.min + (num_left * (keys_per_server - last_kps))
 
-        # first distribution for left and right servers
-
-        self._servers[remove].stub.Redistribute(
-            RedistributeRequest(destination_server=keys[index - 1], lower_val=self._servers[remove].min,
-                                upper_val=keys_left_rearrange - keys_left + self._servers[remove].min))
-        self._servers[remove].stub.Redistribute(
-            RedistributeRequest(destination_server=keys[index], lower_val=keys_left_rearrange - keys_left
-                                                                          + self._servers[remove].min,
-                                upper_val=self._servers[remove].max))
-
-        for key in reversed(keys[:index]):
-            pass
+        keys_left = KeyRange(keys_to_redistribute.min, keys_to_redistribute.max)
+        keys_right = KeyRange(keys_to_redistribute.min, keys_to_redistribute.max)
+        if num_left != 0 and num_right != 0:
+            keys_left = KeyRange(keys_to_redistribute.min, division)
+            keys_right = KeyRange(division + 1, keys_to_redistribute.max)
+            logger.info(f"Redistribute {keys_left} to the left and {keys_right} to the right.")
+            self._redistribute(server, "LEFT", keys_left)
+            self._redistribute(server, "RIGHT", keys_right)
+        elif num_right == 0 and num_left != 0:
+            logger.info(f"Redistribute {keys_right} to the left.")
+            self._redistribute(server, "LEFT", keys_left)
+        else:
+            logger.info(f"Redistribute {keys_left} to the right.")
+            self._redistribute(server, "RIGHT", keys_right)
 
     def _rearrange(self, server: str, keys_per_server: int):
         keys = list(self._servers.keys())
