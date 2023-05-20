@@ -93,10 +93,10 @@ class KVStorageSimpleService(KVStorageService):
             self._dictionary[key] = value
 
     def redistribute(self, destination_server: str, lower_val: int, upper_val: int):
-        keys_transfer = list()
+        keys_transfer = []
         logger.info(f"Lower val {lower_val}, upper val {upper_val}")
         logger.info(self._dictionary)
-        req = TransferRequest()
+
         for i in range(lower_val, upper_val + 1):
             if i in self._dictionary.keys():
                 logger.info(i)
@@ -110,7 +110,7 @@ class KVStorageSimpleService(KVStorageService):
             self._brothers[destination_server] = KVStoreStub(channel)
         if len(keys_transfer) != 0:
             logger.info(keys_transfer)
-            self._brothers[destination_server].Transfer(req.keys_values.extend(keys_transfer))
+            self._brothers[destination_server].Transfer(TransferRequest(keys_values=keys_transfer))
 
     def transfer(self, keys_values: List[KeyValue]):
         logger.info(f"transfer: {keys_values}")
