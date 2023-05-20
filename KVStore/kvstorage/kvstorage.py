@@ -96,26 +96,22 @@ class KVStorageSimpleService(KVStorageService):
         keys_transfer = []
         logger.info(f"Lower val {lower_val}, upper val {upper_val}")
         logger.info(self._dictionary)
+        req = TransferRequest()
 
         for i in range(lower_val, upper_val + 1):
             if i in self._dictionary.keys():
-                logger.info(i)
                 popped = self._dictionary.pop(i)
-                logger.info(f"popped : {popped}")
-                kv = KeyValue(key=i, value=popped)
-                logger.info(kv)
-                keys_transfer.append(kv)
+                req.keys_values.append(KeyValue(key=i, value=popped))
+                keys_transfer.append(KeyValue(key=i, value=popped))
         if destination_server not in self._brothers.keys():
             channel = grpc.insecure_channel(destination_server)
             self._brothers[destination_server] = KVStoreStub(channel)
         if len(keys_transfer) != 0:
-            logger.info(keys_transfer)
-            self._brothers[destination_server].Transfer(TransferRequest(keys_values=keys_transfer))
+            self._brothers[destination_server].Transfer(req)
 
     def transfer(self, keys_values: List[KeyValue]):
-        logger.info(f"transfer: {keys_values}")
-        for key, value in keys_values:
-            self._dictionary[key] = value
+        for key_value in keys_values:
+            self._dictionary[key_value.key] = key_value.value
 
 
 class KVStorageReplicasService(KVStorageSimpleService):
@@ -217,6 +213,7 @@ class KVStorageServicer(KVStoreServicer):
     def Transfer(self, request: TransferRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
         keys_values = request.keys_values
         self.storage_service.transfer(list(keys_values))
+        return google_dot_protobuf_dot_empty__pb2.Empty()
 
     def AddReplica(self, request: ServerRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
         """
