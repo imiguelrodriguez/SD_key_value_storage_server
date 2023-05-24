@@ -87,28 +87,39 @@ class ShardClient(SimpleClient):
 
 
 class ShardReplicaClient(ShardClient):
+    def __init__(self, shard_master_address: str):
+        super().__init__(shard_master_address)
+
+    def _query_replica_server(self, key: int, value: Union[str, None], typee: Union[Type[GetRequest], Type[PutRequest], Type[AppendRequest]], op: Operation):
+        req = QueryReplicaRequest(key=key, operation=op)
+        response = self.stub.QueryReplica(req)
+        if response.server not in self._servers.keys():
+            channel = grpc.insecure_channel(response.server)
+            self._servers[response.server] = KVStoreStub(channel)
+        if typee is GetRequest:
+            return typee(key=key), response.server
+        else:
+            return typee(key=key, value=value), response.server
 
     def get(self, key: int) -> Union[str, None]:
-        """
-        To fill with your code
-        """
+        query, server = self._query_replica_server(key, None, GetRequest, Operation.Value("GET"))
+        val = _get_return(self._servers[server].Get(query))
+        return val
 
     def l_pop(self, key: int) -> Union[str, None]:
-        """
-        To fill with your code
-        """
+        query, server = self._query_replica_server(key, None, GetRequest, Operation.Value("L_POP"))
+        val = _get_return(self._servers[server].LPop(query))
+        return val
 
     def r_pop(self, key: int) -> Union[str, None]:
-        """
-        To fill with your code
-        """
+        query, server = self._query_replica_server(key, None, GetRequest, Operation.Value("R_POP"))
+        val = _get_return(self._servers[server].RPop(query))
+        return val
 
     def put(self, key: int, value: str):
-        """
-        To fill with your code
-        """
+        query, server = self._query_replica_server(key, value, PutRequest, Operation.Value("PUT"))
+        self._servers[server].Put(query)
 
     def append(self, key: int, value: str):
-        """
-        To fill with your code
-        """
+        query, server = self._query_replica_server(key, value, AppendRequest, Operation.Value("APPEND"))
+        self._servers[server].Append(query)
