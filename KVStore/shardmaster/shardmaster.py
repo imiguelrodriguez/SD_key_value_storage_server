@@ -2,6 +2,7 @@ import logging
 import threading
 
 import grpc
+from treelib import Tree
 
 from KVStore.tests.utils import KEYS_LOWER_THRESHOLD, KEYS_UPPER_THRESHOLD
 from KVStore.protos.kv_store_pb2 import RedistributeRequest, ServerRequest
@@ -175,9 +176,15 @@ class ShardMasterSimpleService(ShardMasterService):
 class ShardMasterReplicasService(ShardMasterSimpleService):
     def __init__(self, number_of_shards: int):
         super().__init__()
-        """
-        To fill with your code
-        """
+        self._n_shards = number_of_shards
+        self._actual_shards = 0
+        self._r_groups = dict()
+
+    def _hash_group(self, key: int) -> int:
+        keys_per_server = KEYS_UPPER_THRESHOLD
+        if self._actual_shards > 0:
+            keys_per_server = KEYS_UPPER_THRESHOLD // self._actual_shards
+        return key // keys_per_server
 
     def leave(self, server: str):
         """
@@ -185,9 +192,35 @@ class ShardMasterReplicasService(ShardMasterSimpleService):
         """
 
     def join_replica(self, server: str) -> Role:
-        """
-        To fill with your code
-        """
+        role: Role
+        if self._actual_shards < self._n_shards:
+            role = Role.Value("MASTER")
+            num = self._actual_shards
+            channel = grpc.insecure_channel(server)
+            stub = KVStoreStub(channel)
+            if num == 0:
+                self._r_groups[num] = {server: KeyRange(KEYS_LOWER_THRESHOLD, KEYS_UPPER_THRESHOLD, stub)}
+            else:
+                keys_per_server = (KEYS_UPPER_THRESHOLD + 1) // (num + 1)
+                self._r_groups[num] = {server: KeyRange((keys_per_server * num) + 1, KEYS_UPPER_THRESHOLD, stub)}
+                self._rearrange(server, keys_per_server)
+            self._actual_shards += 1
+        else:
+            role = Role.Value("REPLICA")
+
+        return role
+
+    def _rearrange(self, server: str, keys_per_server: int):
+        keys = list(self._servers.keys())
+        for i, key in enumerate(keys[:-1]):
+            # can be threaded
+            self._servers[key].min = i if i == 0 else keys_per_server * i + 1
+            new_max = keys_per_server * (i + 1)
+            logger.info(f"join: {len(self._servers)}")
+            logger.info(self._servers[key].max)
+            self._servers[key].stub.Redistribute(RedistributeRequest(destination_server=keys[i + 1], lower_val=new_max + 1,
+                                                                     upper_val=self._servers[key].max))
+            self._servers[key].max = new_max
 
     def query_replica(self, key: int, op: Operation) -> str:
         """
