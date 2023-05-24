@@ -221,11 +221,15 @@ class ShardMasterServicer(ShardMasterServicer):
         return query_response
 
     def JoinReplica(self, request: JoinRequest, context) -> JoinReplicaResponse:
-        """
-        To fill with your code
-        """
+        server = request.server
+        role = self.shard_master_service.join_replica(server)
+        return JoinReplicaResponse(role)
 
     def QueryReplica(self, request: QueryReplicaRequest, context) -> QueryResponse:
-        """
-        To fill with your code
-        """
+        key = request.key
+        op = request.operation
+        response = self.shard_master_service.query_replica(key, op)
+        query_response = QueryResponse()
+        if response is not None:
+            query_response.server = response
+        return query_response

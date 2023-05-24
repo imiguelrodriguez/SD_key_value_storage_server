@@ -216,11 +216,11 @@ class KVStorageServicer(KVStoreServicer):
         return google_dot_protobuf_dot_empty__pb2.Empty()
 
     def AddReplica(self, request: ServerRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
-        """
-        To fill with your code
-        """
+        server = request.server
+        self.storage_service.add_replica(server)
+        return google_dot_protobuf_dot_empty__pb2.Empty()
 
     def RemoveReplica(self, request: ServerRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
-        """
-        To fill with your code
-        """
+        server = request.server
+        self.storage_service.remove_replica(server)
+        return google_dot_protobuf_dot_empty__pb2.Empty()
