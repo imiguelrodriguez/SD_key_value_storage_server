@@ -1,8 +1,8 @@
 import logging
 import threading
+import random
 
 import grpc
-from treelib import Tree
 
 from KVStore.tests.utils import KEYS_LOWER_THRESHOLD, KEYS_UPPER_THRESHOLD
 from KVStore.protos.kv_store_pb2 import RedistributeRequest, ServerRequest
@@ -111,7 +111,7 @@ class ShardMasterSimpleService(ShardMasterService):
 
         elif direction.upper() == "RIGHT":
             logger.info(f"RIGHT: redistributing {r.min} to {r.max}.")
-            for i in range(index, len(self._servers)-1):
+            for i in range(index, len(self._servers) - 1):
                 self._servers[server].stub.Redistribute(
                     RedistributeRequest(destination_server=servers_list[i + 1], lower_val=r.min,
                                         upper_val=r.max))
@@ -125,7 +125,8 @@ class ShardMasterSimpleService(ShardMasterService):
         # supposing at least one server left
         self._lock.acquire()
         if len(self._servers) > 1:
-            logger.info(f"I'm server number {list(self._servers).index(server)} of {len(self._servers)} servers and I leave.")
+            logger.info(
+                f"I'm server number {list(self._servers).index(server)} of {len(self._servers)} servers and I leave.")
             keys_to_redistribute = self._servers[server]
             num_left = self._get_servers("LEFT", server)
             num_right = self._get_servers("RIGHT", server)
@@ -161,8 +162,9 @@ class ShardMasterSimpleService(ShardMasterService):
             new_max = keys_per_server * (i + 1)
             logger.info(f"join: {len(self._servers)}")
             logger.info(self._servers[key].max)
-            self._servers[key].stub.Redistribute(RedistributeRequest(destination_server=keys[i + 1], lower_val=new_max + 1,
-                                                                     upper_val=self._servers[key].max))
+            self._servers[key].stub.Redistribute(
+                RedistributeRequest(destination_server=keys[i + 1], lower_val=new_max + 1,
+                                    upper_val=self._servers[key].max))
             self._servers[key].max = new_max
 
     def query(self, key: int) -> str:
@@ -193,21 +195,32 @@ class ShardMasterReplicasService(ShardMasterSimpleService):
 
     def join_replica(self, server: str) -> Role:
         role: Role
+        channel = grpc.insecure_channel(server)
+        stub = KVStoreStub(channel)
+
         if self._actual_shards < self._n_shards:
             role = Role.Value("MASTER")
             num = self._actual_shards
-            channel = grpc.insecure_channel(server)
-            stub = KVStoreStub(channel)
             if num == 0:
                 self._r_groups[num] = {server: KeyRange(KEYS_LOWER_THRESHOLD, KEYS_UPPER_THRESHOLD, stub)}
             else:
                 keys_per_server = (KEYS_UPPER_THRESHOLD + 1) // (num + 1)
                 self._r_groups[num] = {server: KeyRange((keys_per_server * num) + 1, KEYS_UPPER_THRESHOLD, stub)}
                 self._rearrange(server, keys_per_server)
-            self._actual_shards += 1
+
         else:
             role = Role.Value("REPLICA")
+            minimum = int("inf")
+            key = -1
+            for i in self._r_groups.keys():
+                if len(self._r_groups[i]) < minimum:
+                    minimum = len(self._r_groups[i])
+                    key = i
+            rmaster = self._r_groups[key]
+            rmaster[server] = KeyRange(rmaster[rmaster.keys()[0]].min, rmaster[rmaster.keys()[0]].max, stub)
+            rmaster[rmaster.keys()[0]].stub.AddReplica(ServerRequest(server))
 
+        self._actual_shards += 1
         return role
 
     def _rearrange(self, server: str, keys_per_server: int):
@@ -218,14 +231,18 @@ class ShardMasterReplicasService(ShardMasterSimpleService):
             new_max = keys_per_server * (i + 1)
             logger.info(f"join: {len(self._servers)}")
             logger.info(self._servers[key].max)
-            self._servers[key].stub.Redistribute(RedistributeRequest(destination_server=keys[i + 1], lower_val=new_max + 1,
-                                                                     upper_val=self._servers[key].max))
+            self._servers[key].stub.Redistribute(
+                RedistributeRequest(destination_server=keys[i + 1], lower_val=new_max + 1,
+                                    upper_val=self._servers[key].max))
             self._servers[key].max = new_max
 
     def query_replica(self, key: int, op: Operation) -> str:
-        """
-        To fill with your code
-        """
+        group = self._r_groups[self._hash_group(key)]
+        if op == Operation.Value("GET"):
+            r = random.randint(0, len(group.keys()) - 1)
+            return group.keys()[r]
+        else:
+            return group.keys()[0]
 
 
 class ShardMasterServicer(ShardMasterServicer):

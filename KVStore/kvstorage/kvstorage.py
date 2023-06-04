@@ -120,9 +120,13 @@ class KVStorageReplicasService(KVStorageSimpleService):
     def __init__(self, consistency_level: int):
         super().__init__()
         self.consistency_level = consistency_level
-        """
-        To fill with your code
-        """
+        self._replicas =
+
+    def get(self, key: int) -> Union[str, None]:
+        try:
+            return self._dictionary[key]
+        except KeyError:
+            return None
 
     def l_pop(self, key: int) -> str:
         """
