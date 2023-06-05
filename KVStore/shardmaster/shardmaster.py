@@ -205,8 +205,6 @@ class ShardMasterReplicasService(ShardMasterSimpleService):
                 i = group_keys.index(server)
                 if i == 0:  # replica master leaves
                     num = self._actual_shards - 1
-                    keys_per_server = (KEYS_UPPER_THRESHOLD + 1) // (num + 1)
-
                     self._lock.acquire()
                     if len(self._r_groups) > 1:
                         logger.info(

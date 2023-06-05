@@ -179,6 +179,16 @@ class KVStorageReplicasService(KVStorageSimpleService):
     def remove_replica(self, server: str):
         self._replicas.pop(server)
 
+    def transfer(self, keys_values: List[KeyValue]):
+        super().transfer(keys_values)
+        for key_value in keys_values:
+            self._dictionary[key_value.key] = key_value.value
+        req = TransferRequest()
+        for i in self._dictionary.keys():
+            req.keys_values.append(KeyValue(key=i, value=self._dictionary[i]))
+        for replica in self._replicas.keys():
+            self._replicas[replica].Transfer(req)
+
     def set_role(self, role: Role):
         logger.info(f"Got role {role}")
         self.role = role
