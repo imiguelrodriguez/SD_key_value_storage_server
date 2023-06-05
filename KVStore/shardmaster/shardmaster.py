@@ -186,12 +186,101 @@ class ShardMasterReplicasService(ShardMasterSimpleService):
         keys_per_server = KEYS_UPPER_THRESHOLD
         if self._actual_shards > 0:
             keys_per_server = KEYS_UPPER_THRESHOLD // self._actual_shards
-        return key // keys_per_server
+        group = key // keys_per_server
+        if group == self._actual_shards:
+            return group - 1
+        else:
+            return group
+
+    def _get_servers(self, side: str, index: int) -> int:
+        if side.upper() == "LEFT":
+            return index
+        else:
+            return self._actual_shards - index - 1
 
     def leave(self, server: str):
-        """
-        To fill with your code
-        """
+        for key in list(self._r_groups.keys()):  # look for server in dictionary
+            try:
+                group_keys = list(self._r_groups[key].keys())
+                i = group_keys.index(server)
+                if i == 0:  # replica master leaves
+                    num = self._actual_shards - 1
+                    keys_per_server = (KEYS_UPPER_THRESHOLD + 1) // (num + 1)
+
+                    self._lock.acquire()
+                    if len(self._r_groups) > 1:
+                        logger.info(
+                            f"I'm shard number {key} of {self._actual_shards} shards and I leave.")
+                        keys_to_redistribute = self._r_groups[key][server]
+                        num_left = self._get_servers("LEFT", key)
+                        num_right = self._get_servers("RIGHT", key)
+                        logger.info(f"Left servers: {num_left}, Right servers: {num_right}")
+                        last_kps = KEYS_UPPER_THRESHOLD // len(self._r_groups)
+                        keys_per_server = KEYS_UPPER_THRESHOLD // (len(self._r_groups) - 1)
+                        division = keys_to_redistribute.min + (num_left * (keys_per_server - last_kps))
+                        if num_left != 0 and num_right != 0:
+                            keys_left = KeyRange(keys_to_redistribute.min, division)
+                            keys_right = KeyRange(division + 1, keys_to_redistribute.max)
+                            logger.info(f"Redistribute {keys_left} to the left and {keys_right} to the right.")
+                            self._redistribute(key, "LEFT", keys_left)
+                            self._redistribute(key, "RIGHT", keys_right)
+                            # remove server
+                        elif num_right == 0 and num_left != 0:
+                            logger.info(f"Redistribute {keys_to_redistribute} to the left.")
+                            self._redistribute(key, "LEFT", keys_to_redistribute)
+                        elif num_right != 0 and num_left == 0:
+                            logger.info(f"Redistribute {keys_to_redistribute} to the right.")
+                            self._redistribute(key, "RIGHT", keys_to_redistribute)
+                        logger.info("Keys reallocated.")
+                        logger.info("Removed server.")
+                    else:
+                        logger.info("Can't remove the only server in the system.")
+
+                    self._actual_shards -= 1
+                    self._lock.release()
+                else:  # replica slave leaves
+                    self._r_groups[key][group_keys[0]].stub.RemoveReplica(ServerRequest(server=server))
+                    self._r_groups[key].pop(server)
+            except ValueError:
+                pass
+
+    def _redistribute(self,  index: int, direction: str, r: KeyRange):
+        keys_per_server = KEYS_UPPER_THRESHOLD // (len(self._r_groups) - 1)
+        if direction.upper() == "LEFT":
+            for i in reversed(range(1, index + 1)):
+                inner_dict_list = list(self._r_groups[index])
+                next_index_list = list(self._r_groups[i - 1])
+                logger.info(f"LEFT: redistributing {r.min} to {r.max}.")
+                self._r_groups[index][inner_dict_list[0]].stub.Redistribute(
+                    RedistributeRequest(destination_server=next_index_list[0], lower_val=r.min,
+                                        upper_val=r.max))
+                logger.info("redistributed")
+                for replica in list(self._r_groups[i - 1].keys()):
+                    self._r_groups[i - 1][replica].max = r.max
+                r.max = (keys_per_server * i) - 1
+                r.min = self._r_groups[i - 1][next_index_list[0]].min
+                for replica in list(self._r_groups[i - 1].keys()):
+                    self._r_groups[i - 1][replica].min = keys_per_server * i
+                index = index - 1
+
+        elif direction.upper() == "RIGHT":
+            initial_index = index
+            logger.info(f"RIGHT: redistributing {r.min} to {r.max}.")
+            for i in range(index, len(self._r_groups) - 1):
+                inner_dict_list = list(self._r_groups[index])
+                next_index_list = list(self._r_groups[i + 1])
+                self._r_groups[index][inner_dict_list[0]].stub.Redistribute(
+                    RedistributeRequest(destination_server=next_index_list[0], lower_val=r.min,
+                                        upper_val=r.max))
+                r.max = self._r_groups[i + 1][next_index_list[0]].max
+                r.min = keys_per_server * (i + 1) + 1
+                for replica in list(self._r_groups[i + 1].keys()):
+                    self._r_groups[i + 1][replica].max = r.min - 1
+                    self._r_groups[i + 1][replica].min = i if i == 0 else keys_per_server * i + 1
+                index = index + 1
+            for i in range(initial_index, len(self._r_groups)):
+                self._r_groups[i - 1] = self._r_groups[i]
+            self._r_groups.pop(len(self._r_groups) - 1)
 
     def join_replica(self, server: str) -> Role:
         role: Role
@@ -206,43 +295,43 @@ class ShardMasterReplicasService(ShardMasterSimpleService):
             else:
                 keys_per_server = (KEYS_UPPER_THRESHOLD + 1) // (num + 1)
                 self._r_groups[num] = {server: KeyRange((keys_per_server * num) + 1, KEYS_UPPER_THRESHOLD, stub)}
-                self._rearrange(server, keys_per_server)
-
+                self._rearrange(num, keys_per_server)
+            self._actual_shards += 1
         else:
             role = Role.Value("REPLICA")
-            minimum = int("inf")
+            minimum = float("inf")
             key = -1
             for i in self._r_groups.keys():
                 if len(self._r_groups[i]) < minimum:
                     minimum = len(self._r_groups[i])
                     key = i
             rmaster = self._r_groups[key]
-            rmaster[server] = KeyRange(rmaster[rmaster.keys()[0]].min, rmaster[rmaster.keys()[0]].max, stub)
-            rmaster[rmaster.keys()[0]].stub.AddReplica(ServerRequest(server))
+            keys = list(rmaster.keys())
+            rmaster[server] = KeyRange(rmaster[keys[0]].min, rmaster[keys[0]].max, stub)
+            rmaster[keys[0]].stub.AddReplica(ServerRequest(server=server))
 
-        self._actual_shards += 1
         return role
 
-    def _rearrange(self, server: str, keys_per_server: int):
-        keys = list(self._servers.keys())
+    def _rearrange(self, index: int, keys_per_server: int):
+        keys = list(self._r_groups.keys())
         for i, key in enumerate(keys[:-1]):
-            # can be threaded
-            self._servers[key].min = i if i == 0 else keys_per_server * i + 1
+            inner_keys = list(self._r_groups[key].keys())
+            next_keys = list(self._r_groups[i + 1].keys())
+            self._r_groups[key][inner_keys[0]].min = i if i == 0 else keys_per_server * i + 1
             new_max = keys_per_server * (i + 1)
-            logger.info(f"join: {len(self._servers)}")
-            logger.info(self._servers[key].max)
-            self._servers[key].stub.Redistribute(
-                RedistributeRequest(destination_server=keys[i + 1], lower_val=new_max + 1,
-                                    upper_val=self._servers[key].max))
-            self._servers[key].max = new_max
+            self._r_groups[key][inner_keys[0]].stub.Redistribute(
+                RedistributeRequest(destination_server=next_keys[0], lower_val=new_max + 1,
+                                    upper_val=self._r_groups[key][inner_keys[0]].max))
+            self._r_groups[key][inner_keys[0]].max = new_max
 
     def query_replica(self, key: int, op: Operation) -> str:
         group = self._r_groups[self._hash_group(key)]
+        keys = list(group.keys())
         if op == Operation.Value("GET"):
             r = random.randint(0, len(group.keys()) - 1)
-            return group.keys()[r]
+            return keys[r]
         else:
-            return group.keys()[0]
+            return keys[0]
 
 
 class ShardMasterServicer(ShardMasterServicer):
@@ -273,7 +362,7 @@ class ShardMasterServicer(ShardMasterServicer):
     def JoinReplica(self, request: JoinRequest, context) -> JoinReplicaResponse:
         server = request.server
         role = self.shard_master_service.join_replica(server)
-        return JoinReplicaResponse(role)
+        return JoinReplicaResponse(role=role)
 
     def QueryReplica(self, request: QueryReplicaRequest, context) -> QueryResponse:
         key = request.key

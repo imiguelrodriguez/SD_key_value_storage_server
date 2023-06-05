@@ -1,5 +1,6 @@
 import time
 import random
+from multiprocessing import Process
 from typing import Dict, Union, List
 import logging
 import grpc
@@ -120,47 +121,69 @@ class KVStorageReplicasService(KVStorageSimpleService):
     def __init__(self, consistency_level: int):
         super().__init__()
         self.consistency_level = consistency_level
-        self._replicas =
+        self._replicas = dict()
+        self._updates = set()
+        self._updates_proc = Process(target=self._update)
+
+    def _update(self):
+        while True:
+            time.sleep(EVENTUAL_CONSISTENCY_INTERVAL)
+            if self.consistency_level < len(self._replicas):
+                replicas_list = list(self._replicas.keys())
+                for key in self._updates:
+                    for replica in range(self.consistency_level, len(self._replicas)):
+                        self._replicas[replicas_list[replica]].Put(PutRequest(key=key, value=super()._dictionary[key]))
 
     def get(self, key: int) -> Union[str, None]:
-        try:
-            return self._dictionary[key]
-        except KeyError:
-            return None
+        return super().get(key)
 
     def l_pop(self, key: int) -> str:
-        """
-        To fill with your code
-        """
+        val = super().l_pop(key)
+        if self.role == Role.Value("MASTER"):
+            keys = list(self._replicas)
+            for i in range(self.consistency_level):
+                self._replicas[keys[i]].LPop(GetRequest(key))
+        return val
 
     def r_pop(self, key: int) -> str:
-        """
-        To fill with your code
-        """
+        val = super().l_pop(key)
+        if self.role == Role.Value("MASTER"):
+            keys = list(self._replicas)
+            for i in range(self.consistency_level):
+                self._replicas[keys[i]].RPop(GetRequest(key))
+        return val
 
     def put(self, key: int, value: str):
-        """
-        To fill with your code
-        """
+        super().put(key, value)
+        if self.role == Role.Value("MASTER"):
+            keys = list(self._replicas)
+            for i in range(self.consistency_level):
+                self._replicas[keys[i]].Put(PutRequest(key=key, value=value))
 
     def append(self, key: int, value: str):
-        """
-        To fill with your code
-        """
+        super().append(key, value)
+        if self.role == Role.Value("MASTER"):
+            keys = list(self._replicas)
+            for i in range(self.consistency_level):
+                self._replicas[keys[i]].Append(AppendRequest(key, value))
 
     def add_replica(self, server: str):
-        """
-        To fill with your code
-        """
+        channel = grpc.insecure_channel(server)
+        stub = KVStoreStub(channel)
+        self._replicas[server] = stub
+        req = TransferRequest()
+        for i in self._dictionary.keys():
+            req.keys_values.append(KeyValue(key=i, value=self._dictionary[i]))
+        stub.Transfer(req)
 
     def remove_replica(self, server: str):
-        """
-        To fill with your code
-        """
+        self._replicas.pop(server)
 
     def set_role(self, role: Role):
         logger.info(f"Got role {role}")
         self.role = role
+        if role == 0:
+            self._updates_proc.start()
 
 
 class KVStorageServicer(KVStoreServicer):
