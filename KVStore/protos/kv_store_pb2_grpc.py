@@ -61,6 +61,16 @@ class KVStoreStub(object):
                 request_serializer=KVStore_dot_protos_dot_kv__store__pb2.ServerRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 )
+        self.LockReplica = channel.unary_unary(
+                '/KVStore/LockReplica',
+                request_serializer=KVStore_dot_protos_dot_kv__store__pb2.LockRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                )
+        self.ReleaseReplica = channel.unary_unary(
+                '/KVStore/ReleaseReplica',
+                request_serializer=KVStore_dot_protos_dot_kv__store__pb2.ReleaseRequest.SerializeToString,
+                response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+                )
 
 
 class KVStoreServicer(object):
@@ -124,6 +134,18 @@ class KVStoreServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
+    def LockReplica(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ReleaseReplica(self, request, context):
+        """Missing associated documentation comment in .proto file."""
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
 
 def add_KVStoreServicer_to_server(servicer, server):
     rpc_method_handlers = {
@@ -170,6 +192,16 @@ def add_KVStoreServicer_to_server(servicer, server):
             'RemoveReplica': grpc.unary_unary_rpc_method_handler(
                     servicer.RemoveReplica,
                     request_deserializer=KVStore_dot_protos_dot_kv__store__pb2.ServerRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
+            'LockReplica': grpc.unary_unary_rpc_method_handler(
+                    servicer.LockReplica,
+                    request_deserializer=KVStore_dot_protos_dot_kv__store__pb2.LockRequest.FromString,
+                    response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
+            ),
+            'ReleaseReplica': grpc.unary_unary_rpc_method_handler(
+                    servicer.ReleaseReplica,
+                    request_deserializer=KVStore_dot_protos_dot_kv__store__pb2.ReleaseRequest.FromString,
                     response_serializer=google_dot_protobuf_dot_empty__pb2.Empty.SerializeToString,
             ),
     }
@@ -332,6 +364,40 @@ class KVStore(object):
             metadata=None):
         return grpc.experimental.unary_unary(request, target, '/KVStore/RemoveReplica',
             KVStore_dot_protos_dot_kv__store__pb2.ServerRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def LockReplica(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/KVStore/LockReplica',
+            KVStore_dot_protos_dot_kv__store__pb2.LockRequest.SerializeToString,
+            google_dot_protobuf_dot_empty__pb2.Empty.FromString,
+            options, channel_credentials,
+            insecure, call_credentials, compression, wait_for_ready, timeout, metadata)
+
+    @staticmethod
+    def ReleaseReplica(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(request, target, '/KVStore/ReleaseReplica',
+            KVStore_dot_protos_dot_kv__store__pb2.ReleaseRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options, channel_credentials,
             insecure, call_credentials, compression, wait_for_ready, timeout, metadata)

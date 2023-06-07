@@ -1,5 +1,5 @@
+import threading
 import time
-import random
 from multiprocessing import Process
 from typing import Dict, Union, List
 import logging
@@ -44,6 +44,12 @@ class KVStorageService:
         pass
 
     def remove_replica(self, server: str):
+        pass
+
+    def lock_replica(self):
+        pass
+
+    def release_replica(self):
         pass
 
 
@@ -124,6 +130,7 @@ class KVStorageReplicasService(KVStorageSimpleService):
         self._replicas = dict()
         self._updates = set()
         self._updates_proc = Process(target=self._update)
+        self._lock = threading.Lock()
 
     def _update(self):
         while True:
@@ -135,37 +142,55 @@ class KVStorageReplicasService(KVStorageSimpleService):
                         self._replicas[replicas_list[replica]].Put(PutRequest(key=key, value=super()._dictionary[key]))
 
     def get(self, key: int) -> Union[str, None]:
+        while self._lock == 0:
+            pass
         return super().get(key)
 
     def l_pop(self, key: int) -> str:
+        self._lock_replicas()
         val = super().l_pop(key)
         if self.role == Role.Value("MASTER"):
             keys = list(self._replicas)
-            for i in range(self.consistency_level):
+            consistency = self.consistency_level if self.consistency_level <= len(self._replicas) else len(
+                self._replicas)
+            for i in range(consistency):
                 self._replicas[keys[i]].LPop(GetRequest(key))
+                self._replicas[keys[i]].ReleaseReplica(ReleaseRequest())
         return val
 
     def r_pop(self, key: int) -> str:
+        self._lock_replicas()
         val = super().l_pop(key)
         if self.role == Role.Value("MASTER"):
             keys = list(self._replicas)
-            for i in range(self.consistency_level):
+            consistency = self.consistency_level if self.consistency_level <= len(self._replicas) else len(
+                self._replicas)
+            for i in range(consistency):
                 self._replicas[keys[i]].RPop(GetRequest(key))
+                self._replicas[keys[i]].ReleaseReplica(ReleaseRequest())
         return val
 
     def put(self, key: int, value: str):
+        self._lock_replicas()
         super().put(key, value)
         if self.role == Role.Value("MASTER"):
             keys = list(self._replicas)
-            for i in range(self.consistency_level):
+            consistency = self.consistency_level if self.consistency_level <= len(self._replicas) else len(
+                self._replicas)
+            for i in range(consistency):
                 self._replicas[keys[i]].Put(PutRequest(key=key, value=value))
+                self._replicas[keys[i]].ReleaseReplica(ReleaseRequest())
 
     def append(self, key: int, value: str):
+        self._lock_replicas()
         super().append(key, value)
         if self.role == Role.Value("MASTER"):
             keys = list(self._replicas)
-            for i in range(self.consistency_level):
+            consistency = self.consistency_level if self.consistency_level <= len(self._replicas) else len(
+                self._replicas)
+            for i in range(consistency):
                 self._replicas[keys[i]].Append(AppendRequest(key, value))
+                self._replicas[keys[i]].ReleaseReplica(ReleaseRequest())
 
     def add_replica(self, server: str):
         channel = grpc.insecure_channel(server)
@@ -194,6 +219,18 @@ class KVStorageReplicasService(KVStorageSimpleService):
         self.role = role
         if role == 0:
             self._updates_proc.start()
+
+    def lock_replica(self):
+        self._lock.acquire()
+
+    def release_replica(self):
+        self._lock.release()
+
+    def _lock_replicas(self):
+        keys = list(self._replicas)
+        consistency = self.consistency_level if self.consistency_level <= len(self._replicas) else len(self._replicas)
+        for i in range(consistency):
+            self._replicas[keys[i]].LockReplica(LockRequest())
 
 
 class KVStorageServicer(KVStoreServicer):
@@ -260,4 +297,12 @@ class KVStorageServicer(KVStoreServicer):
     def RemoveReplica(self, request: ServerRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
         server = request.server
         self.storage_service.remove_replica(server)
+        return google_dot_protobuf_dot_empty__pb2.Empty()
+
+    def LockReplica(self, request: LockRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
+        self.storage_service.lock_replica()
+        return google_dot_protobuf_dot_empty__pb2.Empty()
+
+    def ReleaseReplica(self, request: ReleaseRequest, context) -> google_dot_protobuf_dot_empty__pb2.Empty:
+        self.storage_service.release_replica()
         return google_dot_protobuf_dot_empty__pb2.Empty()

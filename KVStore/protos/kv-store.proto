@@ -43,6 +43,11 @@ message ServerRequest {
     string server = 1;
 }
 
+message LockRequest {
+}
+
+message ReleaseRequest {
+}
 
 // RPCs for key-value server
 service KVStore {
@@ -60,4 +65,6 @@ service KVStore {
     // Necessary for the third subtask
     rpc AddReplica(ServerRequest) returns (google.protobuf.Empty) {}
     rpc RemoveReplica(ServerRequest) returns (google.protobuf.Empty) {}
+    rpc LockReplica(LockRequest) returns (google.protobuf.Empty) {}
+    rpc ReleaseReplica(ReleaseRequest) returns (google.protobuf.Empty) {}
 }

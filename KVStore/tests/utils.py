@@ -52,7 +52,7 @@ def test_get(client: SimpleClient, key: int, expected_value: str) -> bool:
         result: bool = _get()
         if result is True:
             return True
-        time.sleep(WAIT)
+        #time.sleep(WAIT)
     return False
 
 

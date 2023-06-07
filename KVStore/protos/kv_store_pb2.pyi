@@ -34,6 +34,10 @@ class KeyValue(_message.Message):
     value: str
     def __init__(self, key: _Optional[int] = ..., value: _Optional[str] = ...) -> None: ...
 
+class LockRequest(_message.Message):
+    __slots__ = []
+    def __init__(self) -> None: ...
+
 class PutRequest(_message.Message):
     __slots__ = ["key", "value"]
     KEY_FIELD_NUMBER: _ClassVar[int]
@@ -51,6 +55,10 @@ class RedistributeRequest(_message.Message):
     lower_val: int
     upper_val: int
     def __init__(self, destination_server: _Optional[str] = ..., lower_val: _Optional[int] = ..., upper_val: _Optional[int] = ...) -> None: ...
+
+class ReleaseRequest(_message.Message):
+    __slots__ = []
+    def __init__(self) -> None: ...
 
 class ServerRequest(_message.Message):
     __slots__ = ["server"]
