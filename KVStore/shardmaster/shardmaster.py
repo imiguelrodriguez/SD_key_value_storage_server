@@ -73,6 +73,7 @@ class ShardMasterSimpleService(ShardMasterService):
         self._lock = threading.Lock()
 
     def join(self, server: str):
+        self._lock.acquire()
         num = len(self._servers)
         channel = grpc.insecure_channel(server)
         stub = KVStoreStub(channel)
@@ -82,6 +83,7 @@ class ShardMasterSimpleService(ShardMasterService):
             keys_per_server = (KEYS_UPPER_THRESHOLD + 1) // (num + 1)
             self._servers[server] = KeyRange((keys_per_server * num) + 1, KEYS_UPPER_THRESHOLD, stub)
             self._rearrange(server, keys_per_server)
+        self._lock.release()
 
     def _get_servers(self, side: str, server: str) -> int:
         keys = list(self._servers)
@@ -149,10 +151,10 @@ class ShardMasterSimpleService(ShardMasterService):
                 self._redistribute(server, "RIGHT", keys_to_redistribute)
             logger.info("Keys reallocated.")
             self._servers.pop(server)
-            self._lock.release()
             logger.info("Removed server.")
         else:
             logger.info("Can't remove the only server in the system.")
+        self._lock.release()
 
     def _rearrange(self, server: str, keys_per_server: int):
         keys = list(self._servers.keys())

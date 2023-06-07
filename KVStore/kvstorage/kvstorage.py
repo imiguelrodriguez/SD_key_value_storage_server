@@ -1,7 +1,6 @@
 import threading
 import time
-from multiprocessing import Process
-from typing import Dict, Union, List
+from typing import Union, List
 import logging
 import grpc
 from KVStore.protos.kv_store_pb2 import *
@@ -58,7 +57,7 @@ class KVStorageSimpleService(KVStorageService):
     def __init__(self):
         super().__init__()
         self._dictionary = dict()
-        self._brothers = dict()  # TODO: get rid of stub if deleted
+        self._brothers = dict()
 
     def get(self, key: int) -> Union[str, None]:
         try:
@@ -129,7 +128,7 @@ class KVStorageReplicasService(KVStorageSimpleService):
         self.consistency_level = consistency_level
         self._replicas = dict()
         self._updates = set()
-        self._updates_proc = Process(target=self._update)
+        self._updates_proc = threading.Thread(target=self._update)
         self._lock = threading.Lock()
 
     def _update(self):
