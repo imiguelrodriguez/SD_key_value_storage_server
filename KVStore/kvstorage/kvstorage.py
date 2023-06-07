@@ -141,8 +141,6 @@ class KVStorageReplicasService(KVStorageSimpleService):
                         self._replicas[replicas_list[replica]].Put(PutRequest(key=key, value=super()._dictionary[key]))
 
     def get(self, key: int) -> Union[str, None]:
-        while self._lock == 0:
-            pass
         return super().get(key)
 
     def l_pop(self, key: int) -> str:
@@ -226,10 +224,11 @@ class KVStorageReplicasService(KVStorageSimpleService):
         self._lock.release()
 
     def _lock_replicas(self):
-        keys = list(self._replicas)
-        consistency = self.consistency_level if self.consistency_level <= len(self._replicas) else len(self._replicas)
-        for i in range(consistency):
-            self._replicas[keys[i]].LockReplica(LockRequest())
+        if self.role == 0:  # that is, I'm a master
+            keys = list(self._replicas)
+            consistency = self.consistency_level if self.consistency_level <= len(self._replicas) else len(self._replicas)
+            for i in range(consistency):
+                self._replicas[keys[i]].LockReplica(LockRequest())
 
 
 class KVStorageServicer(KVStoreServicer):
